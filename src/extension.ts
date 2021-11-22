@@ -55,17 +55,20 @@ export function activate(context: vscode.ExtensionContext) {
 
     const hoverProvider = vscode.languages.registerHoverProvider('p2tas', {
         provideHover(document: vscode.TextDocument, position: vscode.Position) {
+            var toolsInfo = "";
+            var tickInfo = "";
+
             const hoveredLineText = document.lineAt(position.line).text;
 
-            if (!hoveredLineText.startsWith('//') && position.character < hoveredLineText.indexOf('>')) {
-                const [tick, loopStartTick] = getTickForLine(position.line, document);
-                return {
-                    contents: [`Tick: ${tick}${loopStartTick ? ` (Repeat start: ${loopStartTick})` : ""}`]
-                };
+            if (!hoveredLineText.startsWith('//')) {
+                if (position.character < hoveredLineText.indexOf('>')) {
+                    const [tick, loopStartTick] = getTickForLine(position.line, document);
+                    tickInfo = `Tick: ${tick}${loopStartTick ? ` (Repeat start: ${loopStartTick})` : ""}`;
+                }
             }
 
             return {
-                contents: []
+                contents: [tickInfo, toolsInfo]
             };
         }
     });
@@ -111,6 +114,32 @@ export function activate(context: vscode.ExtensionContext) {
             else editBuilder.replace(editor!.selection, `+${newTick.toString()}>||||`);
         });
     });
+}
+
+function getToolsForLine(line: number, document: vscode.TextDocument): string[] {
+    var result: string[] = [];
+    for (var i = 0; i < line; i++) {
+        const lineText = document.lineAt(i).text;
+        if (lineText.startsWith('start') || lineText.startsWith('//') || lineText.trim().length === 0) continue;
+
+        const tools = lineText.substring(lineText.lastIndexOf('|') + 1).split(';').map((value, index) => value.trim());
+        for (const tool of tools) {
+            // Tool arguments e.g.: [autoaim, off]
+            const args = tool.split(' ');
+            if (args.length < 2) continue;
+
+            if (args[1] === "off")
+                // Remove tool from the list
+                result.splice(result.indexOf(args[0]), 1);
+            else {
+                // Tool is already in the list
+                if (result.indexOf(args[0]) !== -1) continue;
+                result.push(args[0]);
+            }
+        }
+    }
+
+    return result;
 }
 
 // Returns the tick count and the tick count of the start of a repeat block
