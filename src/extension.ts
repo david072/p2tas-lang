@@ -58,9 +58,16 @@ export function activate(context: vscode.ExtensionContext) {
             var toolsInfo = "";
             var tickInfo = "";
 
-            const hoveredLineText = document.lineAt(position.line).text;
+            const hoveredLineText = document.lineAt(position.line).text.trim();
 
             if (!hoveredLineText.startsWith('//')) {
+                // Matches framebulk
+                if (hoveredLineText.match("^[+]?.*")) {
+                    const tools = getToolsForLine(position.line, document).join(', ')
+                    if (tools.length !== 0)
+                        toolsInfo = `Active tools: ${tools}`;
+                }
+
                 if (position.character < hoveredLineText.indexOf('>')) {
                     const [tick, loopStartTick] = getTickForLine(position.line, document);
                     tickInfo = `Tick: ${tick}${loopStartTick ? ` (Repeat start: ${loopStartTick})` : ""}`;
@@ -117,27 +124,89 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 function getToolsForLine(line: number, document: vscode.TextDocument): string[] {
+    // Helper class used to count ticks, e.g. for lerped setang.
+    // ticksRemaining is decreased every framebulk, depending it's value.
+    // After it has reached 0, the index-th element of the result array is removed.
+    class Counter {
+        index: number;
+        startTick: number;
+        totalTicks: number;
+        ticksRemaining: number;
+
+        constructor(index: number, startTick: number, ticks: number) {
+            this.index = index;
+            this.startTick = startTick;
+            this.totalTicks = ticks;
+            this.ticksRemaining = ticks;
+        }
+    }
+
+    function removeResult(index: number) {
+        result.splice(index, 1);
+        for (var i = 0; i < counters.length; i++) {
+            if (counters[i].index > index) counters[i].index--;
+            else if (counters[i].index === index) counters.splice(i, 1);
+        }
+    }
+
     var result: string[] = [];
-    for (var i = 0; i < line; i++) {
-        const lineText = document.lineAt(i).text;
+    var counters: Counter[] = [];
+    for (let i = 0; i <= line; i++) {
+        const lineText = document.lineAt(i).text.trim();
         if (lineText.startsWith('start') || lineText.startsWith('//') || lineText.trim().length === 0) continue;
 
-        const tools = lineText.substring(lineText.lastIndexOf('|') + 1).split(';').map((value, index) => value.trim());
-        for (const tool of tools) {
-            // Tool arguments e.g.: [autoaim, off]
-            const args = tool.split(' ');
-            if (args.length < 2) continue;
+        for (let i = 0; i < counters.length; i++) {
+            const counter = counters[i];
 
-            if (args[1] === "off")
-                // Remove tool from the list
-                result.splice(result.indexOf(args[0]), 1);
-            else {
-                // Tool is already in the list
-                if (result.indexOf(args[0]) !== -1) continue;
-                result.push(args[0]);
+            if (lineText.startsWith('+')) counter.ticksRemaining -= +lineText.substring(1, lineText.indexOf('>'));
+            else counter.ticksRemaining = counter.totalTicks - (+lineText.substring(0, lineText.indexOf('>')) - counter.startTick);
+
+            // Remove counter since it reached 0
+            if (counter.ticksRemaining <= 0) {
+                removeResult(counter.index);
+                counters.splice(i, 1);
+            }
+        }
+
+        // We need to decrement the counters, changes in the line you are hovering over should be ignored
+        if (i === line) break;
+
+        // Only if the line has four "|" in it
+        if (lineText.split("|").length - 1 === 4) {
+            const tools = lineText.substring(lineText.lastIndexOf('|') + 1).split(';').map((value, index) => value.trim());
+            for (const tool of tools) {
+                // Tool arguments e.g.: [autoaim, off]
+                const args = tool.split(' ');
+                if (args.length < 2) continue;
+
+                if (args[0] === "setang") {
+                    // check if the "lerp duration" parameter is present
+                    if (args.length < 4) continue;
+
+                    counters.push(new Counter(result.length, getTickForLine(i, document)[0], +(args[args.length - 1])));
+                    result.push(args[0]);
+                    continue;
+                }
+                else if (args[0] === "decel") {
+                    if (result.indexOf(args[0]) === -1)
+                        result.push(`(${args[0]})`);
+                    continue;
+                }
+
+                if (args[1] === "off")
+                    // Remove tool from the list
+                    removeResult(result.indexOf(args[0]));
+                else {
+                    // Tool is already in the list
+                    if (result.indexOf(args[0]) !== -1) continue;
+                    result.push(args[0]);
+                }
             }
         }
     }
+
+    for (var counter of counters)
+        result[counter.index] += ` (${counter.ticksRemaining} ticks left)`;
 
     return result;
 }
