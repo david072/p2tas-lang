@@ -11,6 +11,18 @@ const tokens: { [command: string]: string[]; } = {
     "decel": ["off"]
 };
 
+const activeToolsDisplayDecorationType = vscode.window.createTextEditorDecorationType({
+    after: {
+        color: new vscode.ThemeColor("tab.inactiveForeground"),
+        margin: "10px"
+    }
+});
+
+var activeToolsDisplayDecoration: vscode.DecorationOptions & vscode.DecorationRenderOptions = {
+    range: new vscode.Range(new vscode.Position(0, 0),
+        (vscode.window.activeTextEditor?.document?.lineAt(0)?.range?.end || new vscode.Position(0, 0)))
+}
+
 export function activate(context: vscode.ExtensionContext) {
 
 	const tool_keyword_provider = vscode.languages.registerCompletionItemProvider('p2tas', {
@@ -55,27 +67,17 @@ export function activate(context: vscode.ExtensionContext) {
 
     const hoverProvider = vscode.languages.registerHoverProvider('p2tas', {
         provideHover(document: vscode.TextDocument, position: vscode.Position) {
-            var toolsInfo = "";
-            var tickInfo = "";
-
             const hoveredLineText = document.lineAt(position.line).text.trim();
 
-            if (!hoveredLineText.startsWith('//')) {
-                // Matches framebulk
-                if (hoveredLineText.match("^[+]?.*")) {
-                    const tools = getToolsForLine(position.line, document).join(', ')
-                    if (tools.length !== 0)
-                        toolsInfo = `Active tools: ${tools}`;
-                }
-
-                if (position.character < hoveredLineText.indexOf('>')) {
-                    const [tick, loopStartTick] = getTickForLine(position.line, document);
-                    tickInfo = `Tick: ${tick}${loopStartTick ? ` (Repeat start: ${loopStartTick})` : ""}`;
-                }
+            if (!hoveredLineText.startsWith('//') && position.character < hoveredLineText.indexOf('>')) {
+                const [tick, loopStartTick] = getTickForLine(position.line, document);
+                return {
+                    contents: [`Tick: ${tick}${loopStartTick ? ` (Repeat start: ${loopStartTick})` : ""}`]
+                };
             }
 
             return {
-                contents: [tickInfo, toolsInfo]
+                contents: []
             };
         }
     });
@@ -121,9 +123,51 @@ export function activate(context: vscode.ExtensionContext) {
             else editBuilder.replace(editor!.selection, `+${newTick.toString()}>||||`);
         });
     });
+
+    // Variable used to not refresh multiple times on the same line in onDidChangeTextEditorSelection
+    var previousLine = -1;
+
+    vscode.window.onDidChangeTextEditorSelection(event => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) return;
+
+        const cursorPos = event.selections[0].active;
+
+        if (previousLine === cursorPos.line) {
+            // Refresh the ticks if you change your selection before the '>' !!!UNOPTIMISED!!!!
+            if (cursorPos.character <= editor.document.lineAt(cursorPos.line).text.indexOf('>')) {
+                // FIXME: Maybe don't re-compute everything when something is changed
+                drawActiveToolsDisplay(cursorPos, editor.document);
+                return;
+            }
+            else return;
+        }
+
+        drawActiveToolsDisplay(cursorPos, editor.document);
+        previousLine = cursorPos.line;
+    });
+
+    drawActiveToolsDisplay(vscode.window.activeTextEditor!.selection.active, vscode.window.activeTextEditor!.document);
+}
+
+function drawActiveToolsDisplay(cursorPos: vscode.Position, document: vscode.TextDocument) {
+    const tools = getToolsForLine(cursorPos.line, document).join(', ');
+    activeToolsDisplayDecoration = {
+        range: new vscode.Range(cursorPos, document.lineAt(cursorPos.line).range.end),
+        renderOptions: {
+            after: {
+                contentText: tools.length > 0 ? `Active tools: ${tools}` : "",
+                textDecoration: ";font-size:11px",
+                fontWeight: ";font-weight:lighter"
+            }
+        }
+    };
+    vscode.window.activeTextEditor!.setDecorations(activeToolsDisplayDecorationType, [activeToolsDisplayDecoration]);
 }
 
 function getToolsForLine(line: number, document: vscode.TextDocument): string[] {
+    // FIXME: Take repeat blocks + multiline comments into account
+
     // Helper class used to count ticks, e.g. for lerped setang.
     // ticksRemaining is decreased every framebulk, depending it's value.
     // After it has reached 0, the index-th element of the result array is removed.
