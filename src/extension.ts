@@ -153,7 +153,7 @@ function getToolsForLine(line: number, document: vscode.TextDocument): string[] 
     var counters: Counter[] = [];
     for (let i = 0; i <= line; i++) {
         const lineText = document.lineAt(i).text.trim();
-        if (lineText.startsWith('start') || lineText.startsWith('//') || lineText.trim().length === 0) continue;
+        if (lineText.startsWith('start') || lineText.startsWith('//') || lineText.length === 0) continue;
 
         for (let i = 0; i < counters.length; i++) {
             const counter = counters[i];
@@ -163,8 +163,14 @@ function getToolsForLine(line: number, document: vscode.TextDocument): string[] 
 
             // Remove counter since it reached 0
             if (counter.ticksRemaining <= 0) {
-                removeResult(counter.index);
-                counters.splice(i, 1);
+                // Don't remove the result since autoaim doesn't turn off automatically
+                if (result[counter.index] === "autoaim")
+                    counters.splice(i, 1);
+                else
+                    // removeResult removes the counter as well
+                    removeResult(counter.index);
+
+                i--;
             }
         }
 
@@ -179,10 +185,12 @@ function getToolsForLine(line: number, document: vscode.TextDocument): string[] 
                 const args = tool.split(' ');
                 if (args.length < 2) continue;
 
-                if (args[0] === "setang") {
-                    // check if the "lerp duration" parameter is present
-                    if (args.length < 4) continue;
-
+                if (args[0] === "setang" && args.length === 4) {
+                    counters.push(new Counter(result.length, getTickForLine(i, document)[0], +(args[args.length - 1])));
+                    result.push(args[0]);
+                    continue;
+                }
+                else if (args[0] === "autoaim" && args.length === 5) {
                     counters.push(new Counter(result.length, getTickForLine(i, document)[0], +(args[args.length - 1])));
                     result.push(args[0]);
                     continue;
