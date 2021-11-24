@@ -185,25 +185,10 @@ function getToolsForLine(line: number, document: vscode.TextDocument): string[] 
         }
     }
 
-    function removeResult(index: number) {
-        result.splice(index, 1);
+    function decrementCounters(decrement: (counter: Counter) => void) {
         for (var i = 0; i < counters.length; i++) {
-            if (counters[i].index > index) counters[i].index--;
-            else if (counters[i].index === index) counters.splice(i, 1);
-        }
-    }
-
-    var result: string[] = [];
-    var counters: Counter[] = [];
-    for (let i = 0; i <= line; i++) {
-        const lineText = document.lineAt(i).text.trim();
-        if (lineText.startsWith('start') || lineText.startsWith('//') || lineText.length === 0) continue;
-
-        for (let i = 0; i < counters.length; i++) {
             const counter = counters[i];
-
-            if (lineText.startsWith('+')) counter.ticksRemaining -= +lineText.substring(1, lineText.indexOf('>'));
-            else counter.ticksRemaining = counter.totalTicks - (+lineText.substring(0, lineText.indexOf('>')) - counter.startTick);
+            decrement(counter);
 
             // Remove counter since it reached 0
             if (counter.ticksRemaining <= 0) {
@@ -216,6 +201,59 @@ function getToolsForLine(line: number, document: vscode.TextDocument): string[] 
 
                 i--;
             }
+        }
+    }
+
+    function removeResult(index: number) {
+        result.splice(index, 1);
+        for (var i = 0; i < counters.length; i++) {
+            if (counters[i].index > index) counters[i].index--;
+            else if (counters[i].index === index) counters.splice(i, 1);
+        }
+    }
+
+    var result: string[] = [];
+    var counters: Counter[] = [];
+    var repeatIterations: number | undefined = undefined;
+    var repeatDuration = 0;
+    for (let i = 0; i <= line; i++) {
+        const lineText = document.lineAt(i).text.trim();
+        if (lineText.startsWith('start') || lineText.startsWith('//') || lineText.length === 0) continue;
+
+        if (lineText.startsWith('repeat')) {
+            const iterations = +lineText.substring(6);
+            if (iterations === 0) {
+                // Skip to the end of the loop, since it has 0 iterations
+                while (!document.lineAt(++i).text.trim().startsWith('end') && i >= line);
+                continue;
+            }
+            else {
+                repeatIterations = iterations;
+                // Move to next line
+                continue;
+            }
+        }
+        else if (lineText.startsWith('end')) {
+            if (repeatIterations) {
+                let amount = repeatDuration * repeatIterations;
+                decrementCounters((counter) => counter.ticksRemaining -= amount);
+            }
+
+            repeatIterations = undefined;
+            repeatDuration = 0;
+
+            // Move to next line
+            continue;
+        }
+
+        if (repeatIterations)
+            repeatDuration += +lineText.substring(1, lineText.indexOf('>'));
+        else {
+            let amount = lineText.startsWith('+') ? +lineText.substring(1, lineText.indexOf('>')) : undefined;
+            decrementCounters((counter) => {
+                if (amount) counter.ticksRemaining -= amount;
+                else counter.ticksRemaining -= counter.totalTicks - (+lineText.substring(0, lineText.indexOf('>')) - counter.startTick);
+            });
         }
 
         // We need to decrement the counters, changes in the line you are hovering over should be ignored
