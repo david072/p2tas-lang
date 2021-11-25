@@ -72,7 +72,7 @@ export function activate(context: vscode.ExtensionContext) {
             if (!hoveredLineText.startsWith('//') && position.character < hoveredLineText.indexOf('>')) {
                 const [tick, loopStartTick] = getTickForLine(position.line, document);
                 return {
-                    contents: [`Tick: ${tick}${loopStartTick ? ` (Repeat start: ${loopStartTick})` : ""}`]
+                    contents: [`Tick: ${tick}${loopStartTick !== undefined ? ` (Repeat start: ${loopStartTick})` : ""}`]
                 };
             }
 
@@ -304,7 +304,7 @@ function getToolsForLine(line: number, document: vscode.TextDocument): string[] 
 // Returns the tick count and the tick count of the start of a repeat block
 // FIXME: This is dumb
 function getTickForLine(line: number, document: vscode.TextDocument): [number, number | undefined] {
-    const targetLine = document.lineAt(line).text;
+    const targetLine = document.lineAt(line).text.trim();
 
     if (targetLine.trim().length !== 0 && !targetLine.startsWith('+'))
         return [+targetLine.substring(0, targetLine.indexOf('>')), undefined];
@@ -312,22 +312,21 @@ function getTickForLine(line: number, document: vscode.TextDocument): [number, n
     var tickCount = 0;
     var loopStartTick = undefined;
     var startedOutsideOfLoop = false;
+    var multilineCommentsOpen = 0;
     for (var i = line; i >= 0; i--) {
-        const lineText = document.lineAt(i).text;
-        if (lineText.startsWith('start') || lineText.startsWith('//') || lineText.trim().length === 0) continue;
+        var lineText = document.lineAt(i).text.trim();
+        if (lineText.startsWith('start') || lineText.startsWith('//') || lineText.length === 0) continue;
+
+        [lineText, multilineCommentsOpen] = withMultilineComments(lineText, multilineCommentsOpen, i);
+        if (multilineCommentsOpen > 0 || lineText.length === 0) continue;
 
         if (lineText.startsWith('end')) {
             startedOutsideOfLoop = true;
-            // Evaluate the number of ticks passing in one loop iteration
-            var tickCountInLoop = 0;
-            while (!document.lineAt(--i).text.startsWith('repeat') && i >= 0) {
-                const lineText = document.lineAt(i).text;
-                tickCountInLoop += +(lineText.substring(1, lineText.indexOf('>')));
-            }
-
-            // Get the number of iterations of the repeat block
-            const iterations = +document.lineAt(i).text.substring(6);
-            tickCount += tickCountInLoop * iterations;
+            
+            const [ticksPassingInLoop, indexOfRepeatStatement] = getTicksPassingLoop(document, i);
+            // Continue after the loop
+            i = indexOfRepeatStatement;
+            tickCount += ticksPassingInLoop;
             continue;
         }
         else if (lineText.startsWith('repeat')) {
@@ -348,4 +347,60 @@ function getTickForLine(line: number, document: vscode.TextDocument): [number, n
         loopStartTick = tickCount - loopStartTick;
 
     return [tickCount, loopStartTick];
+}
+
+// Params: document: the document in which to search, index: the index of the end line of the repeat block
+// Returns: the number of ticks, the index of the line of the repeat statement that it ended on
+function getTicksPassingLoop(document: vscode.TextDocument, index: number): [number, number] {
+    var tickCountInLoop = 0;
+    while (!document.lineAt(--index).text.trim().startsWith('repeat') && index >= 0) {
+        const lineText = document.lineAt(index).text.trim();
+        if (lineText.startsWith('start') || lineText.startsWith('//') || lineText.length === 0) continue;
+
+        // Nested loop found. Using recursion to get the ticks passing in that loop
+        if (lineText.startsWith('end')) {
+            const [ticksPassing, indexOfRepeatStatement] = getTicksPassingLoop(document, index);
+            index = indexOfRepeatStatement;
+            tickCountInLoop += ticksPassing;
+            continue;
+        }
+
+        tickCountInLoop += +(lineText.substring(1, lineText.indexOf('>')));
+    }
+
+    // Get the number of iterations of the repeat block
+    const iterations = +document.lineAt(index).text.trim().substring(6);
+
+    if (iterations !== 0)
+        return [tickCountInLoop * iterations, index];
+    // Zero iterations => This repeat block is never going to be executed
+    else
+        return [0, index];
+}
+
+function withMultilineComments(lineText: string, multilineCommentsOpen: number, line: number): [string, number] {
+    const multilineCommentOpenToken = lineText.indexOf('/*');
+        const multilineCommentCloseToken = lineText.indexOf('*/');
+        if (multilineCommentOpenToken !== -1 && multilineCommentCloseToken === -1) {
+            multilineCommentsOpen--;
+            if (multilineCommentsOpen < 0) {
+                // Commment was opened but never closed
+                // FIXME: Show error line under the token. This can be done using a diagnostic collection, however,
+                //  this should be checked for every time something is changed in the file, and not suddently appear when hovering.
+                vscode.window.showErrorMessage(`Comment was opened but never closed! (line: ${++line}, column: ${multilineCommentOpenToken})`);
+                return ["", 0];
+            }
+
+            lineText = lineText.substring(0, multilineCommentOpenToken);
+        }
+        if (lineText.indexOf('*/') !== -1) {
+            if (multilineCommentOpenToken === -1) {
+                multilineCommentsOpen++;
+                lineText = lineText.substring(multilineCommentCloseToken + 2);
+            }
+            else
+                lineText = lineText.substring(multilineCommentOpenToken + 2, multilineCommentCloseToken);
+        }
+
+    return [lineText, multilineCommentsOpen];
 }
