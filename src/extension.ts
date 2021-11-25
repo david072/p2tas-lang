@@ -166,8 +166,6 @@ function drawActiveToolsDisplay(cursorPos: vscode.Position, document: vscode.Tex
 }
 
 function getToolsForLine(line: number, document: vscode.TextDocument): string[] {
-    // FIXME: Take repeat blocks + multiline comments into account
-
     // Helper class used to count ticks, e.g. for lerped setang.
     // ticksRemaining is decreased every framebulk, depending it's value.
     // After it has reached 0, the index-th element of the result array is removed.
@@ -214,11 +212,15 @@ function getToolsForLine(line: number, document: vscode.TextDocument): string[] 
 
     var result: string[] = [];
     var counters: Counter[] = [];
+    var multilineCommentsOpen = 0;
     var repeatIterations: number | undefined = undefined;
     var repeatDuration = 0;
     for (let i = 0; i <= line; i++) {
-        const lineText = document.lineAt(i).text.trim();
+        var lineText = document.lineAt(i).text.trim();
         if (lineText.startsWith('start') || lineText.startsWith('//') || lineText.length === 0) continue;
+
+        [lineText, multilineCommentsOpen] = withMultilineComments(lineText, multilineCommentsOpen, i, true);
+        if (multilineCommentsOpen > 0 || lineText.length === 0) continue;
 
         if (lineText.startsWith('repeat')) {
             const iterations = +lineText.substring(6);
@@ -378,12 +380,13 @@ function getTicksPassingLoop(document: vscode.TextDocument, index: number): [num
         return [0, index];
 }
 
-function withMultilineComments(lineText: string, multilineCommentsOpen: number, line: number): [string, number] {
+function withMultilineComments(lineText: string, multilineCommentsOpen: number, line: number, reversed: Boolean = false): [string, number] {
     const multilineCommentOpenToken = lineText.indexOf('/*');
         const multilineCommentCloseToken = lineText.indexOf('*/');
         if (multilineCommentOpenToken !== -1 && multilineCommentCloseToken === -1) {
-            multilineCommentsOpen--;
-            if (multilineCommentsOpen < 0) {
+            // Add one if we're reversed, otherwise subtract one
+            multilineCommentsOpen -= !reversed ? 1 : -1;
+            if (!reversed && multilineCommentsOpen < 0) {
                 // Commment was opened but never closed
                 // FIXME: Show error line under the token. This can be done using a diagnostic collection, however,
                 //  this should be checked for every time something is changed in the file, and not suddently appear when hovering.
@@ -395,7 +398,14 @@ function withMultilineComments(lineText: string, multilineCommentsOpen: number, 
         }
         if (lineText.indexOf('*/') !== -1) {
             if (multilineCommentOpenToken === -1) {
-                multilineCommentsOpen++;
+                // Subtract one if we're reversed, otherwise add one
+                multilineCommentsOpen += !reversed ? 1 : -1;
+                if (reversed && multilineCommentsOpen < 0) {
+                    // Commment was opened but never closed. See FIXME above!
+                    vscode.window.showErrorMessage(`Comment was opened but never closed! (line: ${++line}, column: ${multilineCommentCloseToken})`);
+                    return ["", 0];
+                }
+
                 lineText = lineText.substring(multilineCommentCloseToken + 2);
             }
             else
