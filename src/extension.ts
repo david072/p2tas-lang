@@ -1,5 +1,7 @@
 
 import * as vscode from 'vscode';
+import * as net from 'net';
+import { SidebarProvider } from './sidebarProvider';
 
 const tokens: { [command: string]: string[]; } = {
     "start": ["now","save","map","next","cm"],
@@ -22,6 +24,8 @@ var activeToolsDisplayDecoration: vscode.DecorationOptions & vscode.DecorationRe
     range: new vscode.Range(new vscode.Position(0, 0),
         (vscode.window.activeTextEditor?.document?.lineAt(0)?.range?.end || new vscode.Position(0, 0)))
 }
+
+var tcpClient = new net.Socket();
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -148,6 +152,68 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     drawActiveToolsDisplay(vscode.window.activeTextEditor!.selection.active, vscode.window.activeTextEditor!.document);
+
+    vscode.commands.registerCommand("p2tas-lang.runTas", async () => {
+        if (tcpClient.destroyed) tcpClient = new net.Socket();
+        
+        if (!tcpClient.remoteAddress)
+            tcpClient.connect({port: 64253, host: 'localhost'});
+
+        const document = vscode.window.activeTextEditor!.document;
+        await document.save();
+
+        const startPos = (document.fileName.lastIndexOf('/') === -1 ? document.fileName.lastIndexOf('\\') : document.fileName.lastIndexOf('/')) + 1;
+        const documentName = document.fileName.substring(startPos, document.fileName.lastIndexOf('.'));
+
+        tcpClient.write(`play ${documentName}`, (error) => {
+            if (error)
+                vscode.window.showErrorMessage(`Error trying to play the TAS: ${error.message}`);
+            else
+                vscode.window.showInformationMessage(`TAS ${documentName} is now playing!`);
+        });
+    });
+
+    vscode.commands.registerCommand('p2tas-lang.stopTas', () => {
+        if (!tcpClient.remoteAddress)
+            tcpClient.connect({port: 64253, host: 'localhost'});
+
+        tcpClient.write('stop', (error) => {
+            if (error)
+                vscode.window.showErrorMessage(`Error trying to stop the currently playing TAS. (Error: ${error.message})`);
+            else 
+                vscode.window.showInformationMessage(`The playing TAS has been stopped!`);
+        });
+    });
+
+    const sidebarProvider = new SidebarProvider(context.extensionUri, tcpClient);
+    context.subscriptions.push(
+      vscode.window.registerWebviewViewProvider(
+        "p2tas-sidebar",
+        sidebarProvider
+      )
+    );
+
+    vscode.workspace.onDidOpenTextDocument((document) => {
+        setFilename(document, sidebarProvider);
+    });
+
+    if (vscode.window.activeTextEditor)
+        setFilename(vscode.window.activeTextEditor!.document, sidebarProvider);
+}
+
+function setFilename(document: vscode.TextDocument, sidebarProvider: SidebarProvider) {
+    if (document.languageId !== 'p2tas') {
+        sidebarProvider.setFilename(undefined);
+        return;
+    }
+
+    const startPos = (document.fileName.lastIndexOf('/') === -1 ? document.fileName.lastIndexOf('\\') : document.fileName.lastIndexOf('/')) + 1;
+    const documentName = document.fileName.substring(startPos, document.fileName.lastIndexOf('.'));
+    sidebarProvider.setFilename(documentName);
+}
+
+export function disable() {
+    tcpClient.destroy();
 }
 
 function drawActiveToolsDisplay(cursorPos: vscode.Position, document: vscode.TextDocument) {

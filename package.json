@@ -47,12 +47,30 @@
                 "command": "p2tas-lang.relativeFromAbsoluteTick",
                 "title": "Relative tick from absolute tick",
                 "category": "P2-TAS"
+            },
+            {
+                "command": "p2tas-lang.runTas",
+                "title": "Run the current TAS",
+                "category": "P2-TAS"
+            },
+            {
+                "command": "p2tas-lang.stopTas",
+                "title": "Stop the currently playing TAS",
+                "category": "P2-TAS"
             }
         ],
         "menus": {
             "commandPalette": [
                 {
                     "command": "p2tas-lang.relativeFromAbsoluteTick",
+                    "when": "editorLangId == p2tas"
+                },
+                {
+                    "command": "p2tas-lang.runTas",
+                    "when": "editorLangId == p2tas"
+                },
+                {
+                    "command": "p2tas-lang.stopTas",
                     "when": "editorLangId == p2tas"
                 }
             ]
@@ -63,9 +81,30 @@
                 "key": "ctrl+shift+t",
                 "mac": "cmd+shift+t"
             }
-        ]
+        ],
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "p2tas-sidebar-view",
+                    "title": "P2-TAS",
+                    "icon": "media/play.svg"
+                }
+            ]
+        },
+        "views": {
+            "p2tas-sidebar-view": [
+                {
+                    "type": "webview",
+                    "id": "p2tas-sidebar",
+                    "name": "P2-TAS",
+                    "icon": "media/play.svg",
+                    "contextualTitle": "P2-TAS"
+                }
+            ]
+        }
     },
     "activationEvents": [
+        "onView:p2tas-sidebar",
         "onLanguage:p2tas",
         "onCommand:p2tas-lang.relativeFromAbsoluteTick"
     ],
@@ -82,6 +121,8 @@
         "@typescript-eslint/eslint-plugin": "^4.16.0",
         "@typescript-eslint/parser": "^4.16.0",
         "eslint": "^7.21.0",
-        "typescript": "^4.2.2"
+        "typescript": "^4.2.2",
+        "vscode-debugadapter": "^1.50.0",
+        "vscode-debugadapter-testsupport": "^1.50.0"
     }
 }
