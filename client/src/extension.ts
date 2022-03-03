@@ -106,6 +106,24 @@ export function activate(context: vscode.ExtensionContext) {
         });
     });
 
+    vscode.commands.registerCommand("p2tas-lang.toggleLineTickType", async () => {
+        var editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            vscode.window.showErrorMessage("No currently active editor");
+            return;
+        };
+
+        const line = editor!.selection.active.line;
+        const oldLineText = editor!.document.lineAt(line).text;
+
+        const newLineText: string = await client.sendRequest("p2tas/toggleLineTickType", [editor!.document.uri, line]);
+        if (newLineText === oldLineText) return;
+
+        editor.edit(editBuilder => {
+            editBuilder.replace(new vscode.Range(new vscode.Position(line, 0), new vscode.Position(line, oldLineText.length)), newLineText);
+        });
+    });
+
     vscode.window.onDidChangeTextEditorSelection(event => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) return;
