@@ -349,6 +349,8 @@ function parseTools(lineText: string, line: number, currentTick: number, startIn
 
         for (let i = 0; i < parts.length; i++) {
             const part = parts[i];
+            if (part.length === 0) continue;
+            
             if (!foundTool) {
                 toolName = part;
                 if (!TASTool.tools.hasOwnProperty(toolName)) {
