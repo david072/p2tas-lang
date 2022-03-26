@@ -54,7 +54,6 @@ connection.onCompletion((params: TextDocumentPositionParams): CompletionItem[] =
 
 	const line = script.lines[params.position.line];
 	const lineText = line.lineText;
-	if (lineText.split("|").length - 1 !== 4) return [];
 
 	let isStartOfLine = false;
 	let isInFirstLine = false;
@@ -114,7 +113,9 @@ connection.onCompletion((params: TextDocumentPositionParams): CompletionItem[] =
 	else {
 		if (isInFirstLine) {
 			if (requestedToolName === "start") {
-				if (toolArguments.length !== 0) return [];
+				if (toolArguments.length === 1) {
+					if (toolArguments[0] !== "next") return [];
+				}
 				return Object.entries(startTypes).map(arg => {
 					return {
 						label: arg[0],

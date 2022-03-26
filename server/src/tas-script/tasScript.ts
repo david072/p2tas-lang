@@ -30,7 +30,6 @@ export class TASScript {
             let commentRange: CommentRange | undefined;
             [lineText, multilineCommentsOpen, commentRange] = this.removeComments(fullLineText, currentLine, multilineCommentsOpen, diagnosticCollector);
 
-            lineText = lineText.trimEnd();
             const trimmedLineText = lineText.trim();
 
             let previousLine = this.lines.length === 0 ? new ScriptLine("", LineType.Framebulk, 0) : this.lines[this.lines.length - 1];
