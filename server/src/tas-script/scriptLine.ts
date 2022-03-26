@@ -69,18 +69,42 @@ function parseStartStatement(lineText: string, line: number, collector: Diagnost
     }
     else if (args.length >= 2) {
         const startType = startTypes[args[1]];
+        // I'm really sorry for this madness. Please find a way to put this into a function and respect whitespace between arguments
         if (startType) {
-            if (!(startType.hasArgument || false)) {
+            if (args[1] === "next") {
                 if (args.length > 2) {
-                    collector.addDiagnosticToLine(line, firstCharacter + args[0].length + args[1].length + 2, "Ignored start parameters", DiagnosticSeverity.Warning);
+                    const childStartType = startTypes[args[2]];
+                    if (childStartType) {
+                        if (!(childStartType.hasArgument || false)) {
+                            collector.addDiagnosticToLine(line, firstCharacter + args[0].length + args[1].length + args[2].length + 3, "Ignored start parameters", DiagnosticSeverity.Warning);
+                        }
+                        else {
+                            if (args.length > 4) {
+                                collector.addDiagnosticToLine(line, firstCharacter + args[0].length + args[1].length + args[2].length + args[3].length + 4, "Ignored start parameters", DiagnosticSeverity.Warning);
+                            }
+                            else if (args.length === 3) {
+                                collector.addDiagnosticToLine(line, lastCharacter, "Expected argument");
+                            }
+                        }
+                    }
+                    else {
+                        collector.addDiagnostic(line, firstCharacter + args[0].length + args[1].length + 2, firstCharacter + args[0].length + args[1].length + 2 + args[2].length, "Invalid start type");
+                    }
                 }
             }
             else {
-                if (args.length > 3) {
-                    collector.addDiagnosticToLine(line, firstCharacter + args[0].length + args[1].length + args[2].length + 3, "Ignored start parameters", DiagnosticSeverity.Warning);
+                if (!(startType.hasArgument || false)) {
+                    if (args.length > 2) {
+                        collector.addDiagnosticToLine(line, firstCharacter + args[0].length + args[1].length + 2, "Ignored start parameters", DiagnosticSeverity.Warning);
+                    }
                 }
-                else if (args.length === 2) {
-                    collector.addDiagnosticToLine(line, lastCharacter, "Expected argument");
+                else {
+                    if (args.length > 3) {
+                        collector.addDiagnosticToLine(line, firstCharacter + args[0].length + args[1].length + args[2].length + 3, "Ignored start parameters", DiagnosticSeverity.Warning);
+                    }
+                    else if (args.length === 2) {
+                        collector.addDiagnosticToLine(line, lastCharacter, "Expected argument");
+                    }
                 }
             }
         }
