@@ -75,15 +75,20 @@ function parseStartStatement(lineText: string, line: number, collector: Diagnost
                 if (args.length > 2) {
                     const childStartType = startTypes[args[2]];
                     if (childStartType) {
-                        if (!(childStartType.hasArgument || false)) {
-                            collector.addDiagnosticToLine(line, firstCharacter + args[0].length + args[1].length + args[2].length + 3, "Ignored start parameters", DiagnosticSeverity.Warning);
+                        if (args[2] === "next") {
+                            collector.addDiagnostic(line, firstCharacter + args[0].length + args[1].length + 2, firstCharacter + args[0].length + args[1].length + 2 + args[2].length, "Invalid start type");
                         }
                         else {
-                            if (args.length > 4) {
-                                collector.addDiagnosticToLine(line, firstCharacter + args[0].length + args[1].length + args[2].length + args[3].length + 4, "Ignored start parameters", DiagnosticSeverity.Warning);
+                            if (!(childStartType.hasArgument || false)) {
+                                collector.addDiagnosticToLine(line, firstCharacter + args[0].length + args[1].length + args[2].length + 3, "Ignored start parameters", DiagnosticSeverity.Warning);
                             }
-                            else if (args.length === 3) {
-                                collector.addDiagnosticToLine(line, lastCharacter, "Expected argument");
+                            else {
+                                if (args.length > 4) {
+                                    collector.addDiagnosticToLine(line, firstCharacter + args[0].length + args[1].length + args[2].length + args[3].length + 4, "Ignored start parameters", DiagnosticSeverity.Warning);
+                                }
+                                else if (args.length === 3) {
+                                    collector.addDiagnosticToLine(line, lastCharacter, "Expected argument");
+                                }
                             }
                         }
                     }
