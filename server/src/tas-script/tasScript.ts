@@ -34,7 +34,7 @@ export class TASScript {
 
             let previousLine = this.lines.length === 0 ? new ScriptLine("", LineType.Framebulk, 0) : this.lines[this.lines.length - 1];
 
-            if (lineText.length === 0 || commentRange?.isWholeLine) {
+            if (lineText.trim().length === 0 || commentRange?.isWholeLine) {
                 this.lines.push(new ScriptLine(fullLineText, LineType.Comment, previousLine.absoluteTick, undefined, previousLine.activeTools, commentRange));
                 currentLine++;
                 continue;
